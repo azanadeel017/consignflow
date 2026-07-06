@@ -1,4 +1,4 @@
-# consignflow
+# Consignflow
 
 A Python tool that automates scanning through bulk e-commerce sales sheets to calculate exact take-home profits after platform fees.
 
