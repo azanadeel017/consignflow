@@ -122,7 +122,7 @@ class FeeCalculatorFactory:
 
 def load_and_parse_sales(csv_file_or_path) -> dict:
     """
-    Helper function to load either a CSV file path (string) or a file-like object (StringIO),
+    Helper function to load either a CSV file path (string/PathLike) or a file-like object (StringIO),
     filter items starting with 'M1', calculate fees, and aggregate financial statistics.
     Returns a dictionary containing raw matched items list and aggregated stats.
     """
@@ -132,17 +132,28 @@ def load_and_parse_sales(csv_file_or_path) -> dict:
     aggregate_net = 0.0
     platform_breakdown = {}
 
-    is_path = isinstance(csv_file_or_path, str)
-    if is_path:
-        if not os.path.exists(csv_file_or_path):
+    # Duck-typing: If it has a 'read' attribute, it's a file-like stream object (e.g. StringIO from Streamlit)
+    if hasattr(csv_file_or_path, "read"):
+        file = csv_file_or_path
+        is_path = False
+    else:
+        # Otherwise, assume it's a file path string or os.PathLike object
+        is_path = True
+        try:
+            if not os.path.exists(csv_file_or_path):
+                return {
+                    "items": [],
+                    "totals": {"gross": 0.0, "fees": 0.0, "net": 0.0, "count": 0, "margin": 0.0},
+                    "platforms": {}
+                }
+            file = open(csv_file_or_path, mode="r", encoding="utf-8")
+        except TypeError:
+            # Fallback in case an unsupported type fails disk checking operations
             return {
                 "items": [],
                 "totals": {"gross": 0.0, "fees": 0.0, "net": 0.0, "count": 0, "margin": 0.0},
                 "platforms": {}
             }
-        file = open(csv_file_or_path, mode="r", encoding="utf-8")
-    else:
-        file = csv_file_or_path
 
     try:
         reader = csv.DictReader(file)
