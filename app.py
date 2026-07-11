@@ -14,25 +14,32 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for rich aesthetics and clean typography
+# Custom CSS for rich aesthetics, emerald/slate color scheme, and clean typography
 st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
     .main {
         background-color: #0f172a;
         color: #f8fafc;
     }
+    
     .metric-card {
         background-color: #1e293b;
         border-radius: 12px;
-        padding: 20px;
+        padding: 24px;
         border: 1px solid #334155;
         text-align: center;
         box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        transition: transform 0.2s ease-in-out;
+        transition: transform 0.2s ease-in-out, border-color 0.2s ease-in-out;
     }
     .metric-card:hover {
         transform: translateY(-2px);
-        border-color: #475569;
+        border-color: #10b981; /* Emerald green highlight on hover */
     }
     .metric-label {
         font-size: 13px;
@@ -43,30 +50,36 @@ st.markdown("""
         letter-spacing: 0.05em;
     }
     .metric-value {
-        font-size: 26px;
+        font-size: 28px;
         font-weight: 700;
     }
+    
     .title-container {
-        padding: 10px 0px 20px 0px;
+        padding: 15px 0px 25px 0px;
         border-bottom: 1px solid #334155;
-        margin-bottom: 20px;
+        margin-bottom: 30px;
     }
     .title-main {
-        font-size: 36px;
+        font-size: 40px;
         font-weight: 800;
         color: #f8fafc;
         margin-bottom: 8px;
         letter-spacing: -0.02em;
+        background: linear-gradient(135deg, #f8fafc 0%, #10b981 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
     .title-sub {
         font-size: 16px;
         color: #94a3b8;
     }
+    
     .tab-header {
-        font-size: 22px;
+        font-size: 24px;
         font-weight: 700;
         color: #f1f5f9;
-        margin-bottom: 15px;
+        margin-bottom: 20px;
+        letter-spacing: -0.01em;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -74,8 +87,8 @@ st.markdown("""
 # App Title & Description
 st.markdown("""
     <div class="title-container">
-        <div class="title-main">📊 ConsignFlow Portal</div>
-        <div class="title-sub">Real-time marketplace transaction auditing and business intelligence analytics.</div>
+        <div class="title-main">ConsignFlow Enterprise Portal</div>
+        <div class="title-sub">Automated multi-platform transaction auditing, consignor split logic, and settlement BI.</div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -222,7 +235,7 @@ with tab1:
         st.markdown(f"""
             <div class="metric-card">
                 <div class="metric-label">Seller Payouts ({consignor_split}%)</div>
-                <div class="metric-value" style="color: #34d399;">${total_consignor_payout:,.2f}</div>
+                <div class="metric-value" style="color: #10b981;">${total_consignor_payout:,.2f}</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -264,7 +277,7 @@ with tab1:
                 df_plot,
                 x="Platform",
                 y="Efficiency (%)",
-                color="#34d399",
+                color="#10b981",
                 use_container_width=True
             )
     else:
@@ -274,14 +287,42 @@ with tab1:
 # TAB 2: CONSIGNOR PAYOUTS
 # ==========================================
 with tab2:
-    st.markdown('<div class="tab-header">Consignor Settlement Center</div>', unsafe_allow_html=True)
+    st.markdown('<div class="tab-header">Master Settlement Ledger</div>', unsafe_allow_html=True)
     
-    if unique_consignors:
-        # Dropdown selection for Consignor
+    if not df_all.empty:
+        # Group and aggregate data for the Master Table
+        df_master = df_all.groupby("Consignor").agg(
+            Items_Sold=("Item Title", "count"),
+            Gross_Revenue=("Gross Price", "sum"),
+            Marketplace_Fees=("Total Fees", "sum"),
+            Store_Commission=("Store Share", "sum"),
+            Net_Payout_Owed=("Seller Share", "sum")
+        ).reset_index()
+
+        # Rename columns for clean representation
+        df_master_display = df_master.rename(columns={
+            "Items_Sold": "Items Sold",
+            "Gross_Revenue": "Gross Revenue ($)",
+            "Marketplace_Fees": "Marketplace Fees ($)",
+            "Store_Commission": "Store Commission ($)",
+            "Net_Payout_Owed": "Net Payout Owed ($)"
+        })
+
+        # Display Master Settlement Table
+        st.dataframe(
+            df_master_display,
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        st.write("")
+        st.markdown('<div class="tab-header" style="font-size: 20px;">Individual Payout Statement</div>', unsafe_allow_html=True)
+        
+        # Dropdown selection for Consignor (placed below the master table)
         selected_consignor = st.selectbox(
             "Select Consignor Account",
             options=unique_consignors,
-            help="Select a consignor to audit their individual ledger and calculate payouts."
+            help="Select a consignor to audit their individual ledger, review invoice math, and export data."
         )
         
         # Filter data for selected consignor
@@ -291,60 +332,72 @@ with tab2:
         c_items = len(df_filtered)
         c_gross = df_filtered["Gross Price"].sum()
         c_fees = df_filtered["Total Fees"].sum()
-        c_net_sale = df_filtered["Net Sale"].sum()
         c_payout = df_filtered["Seller Share"].sum()
         c_store_revenue = df_filtered["Store Share"].sum()
+
+        # Layout cols: Invoice Statement Card (Left) vs. Export Action (Right)
+        inv_col1, inv_col2 = st.columns([3, 2])
         
-        # Consignor Specific Summary Cards
-        st.markdown(f"### 👤 Ledger Summary for Consignor: `{selected_consignor}`")
-        
-        con_col1, con_col2, con_col3, con_col4 = st.columns(4)
-        
-        with con_col1:
+        with inv_col1:
+            # Styled digital payout invoice card
             st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-label">Items Sold</div>
-                    <div class="metric-value" style="color: #a78bfa;">{c_items}</div>
+                <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 25px; font-family: 'Inter', sans-serif; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #475569; padding-bottom: 12px; margin-bottom: 15px;">
+                        <span style="font-weight: 800; font-size: 16px; color: #f8fafc; letter-spacing: 0.05em; text-transform: uppercase;">Consignment Settlement Invoice</span>
+                        <span style="font-weight: 700; font-size: 15px; color: #10b981; background-color: rgba(16, 185, 129, 0.1); padding: 4px 8px; border-radius: 6px;">CONSIGNOR: {selected_consignor}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span style="color: #94a3b8; font-size: 14px;">Gross Sales ({c_items} items)</span>
+                        <span style="color: #f8fafc; font-weight: 600; font-size: 15px;">+${c_gross:,.2f}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span style="color: #94a3b8; font-size: 14px;">Marketplace Fees</span>
+                        <span style="color: #f43f5e; font-weight: 600; font-size: 15px;">-${c_fees:,.2f}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px dashed #475569; padding-bottom: 15px;">
+                        <span style="color: #94a3b8; font-size: 14px;">Store Commission ({store_fee_pct}%)</span>
+                        <span style="color: #f43f5e; font-weight: 600; font-size: 15px;">-${c_store_revenue:,.2f}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; padding-top: 5px;">
+                        <span style="color: #f8fafc;">Total Disbursed to Seller</span>
+                        <span style="color: #10b981;">${c_payout:,.2f}</span>
+                    </div>
                 </div>
             """, unsafe_allow_html=True)
             
-        with con_col2:
-            st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-label">Gross Sales Vol</div>
-                    <div class="metric-value" style="color: #38bdf8;">${c_gross:,.2f}</div>
-                </div>
-            """, unsafe_allow_html=True)
+        with inv_col2:
+            st.markdown("### 💾 Export Center")
+            st.markdown(f"Generate and download the detailed invoice ledger report for `{selected_consignor}`. The file contains transaction-level sales, fee structures, and profit split records.")
             
-        with con_col3:
-            st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-label">Payout Owed (Seller Share)</div>
-                    <div class="metric-value" style="color: #34d399;">${c_payout:,.2f}</div>
-                </div>
-            """, unsafe_allow_html=True)
+            # Format clean individual consignor table (excluding grouped prefix column)
+            df_display = df_filtered.drop(columns=["Consignor"])
+            df_display.columns = [
+                "Item Title", "Platform", "Gross Sales ($)", "Marketplace Fees ($)", 
+                "Net proceeds ($)", "Store Split ($)", "Seller Split ($)"
+            ]
             
-        with con_col4:
-            st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-label">Store Fee Retained (Store Share)</div>
-                    <div class="metric-value" style="color: #fbbf24;">${c_store_revenue:,.2f}</div>
-                </div>
-            """, unsafe_allow_html=True)
+            # Generate in-memory CSV export buffer
+            csv_buffer = io.StringIO()
+            df_display.to_csv(csv_buffer, index=False)
+            csv_data = csv_buffer.getvalue()
+            
+            st.download_button(
+                label=f"📥 Download {selected_consignor} Payout Ledger (CSV)",
+                data=csv_data,
+                file_name=f"consignor_{selected_consignor}_payout_ledger.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
             
         st.write("")
         st.write("")
         
-        # Consignor Specific Detailed Table
-        st.markdown(f"#### Detailed Sales Ledger for `{selected_consignor}`")
-        
-        # Drop Consignor column for the individual table for cleaner layout
-        df_display = df_filtered.drop(columns=["Consignor"])
-        
+        # Display detailed transaction table below
+        st.markdown(f"#### Itemized Audit Log: `{selected_consignor}`")
         st.dataframe(
             df_display,
             use_container_width=True,
             hide_index=True
         )
     else:
-        st.info("No consignor accounts found in the ledger.")
+        st.info("No transaction data available.")
