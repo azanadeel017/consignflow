@@ -1,53 +1,76 @@
 # ConsignFlow
 
-A Python tool that automates scanning through bulk e-commerce sales sheets to calculate exact take-home profits after platform fees.
+A multi-platform Business Intelligence (BI) engine and data pipeline built to parse bulk e-commerce ledgers, calculate platform-specific fee matrices, and output executive financial analytics.
 
 ---
 
-## The Motivation
+## 📊 The Problem & The Solution
 
-Selling in volume on live-stream marketplaces like Whatnot creates a massive data headache. When you are dealing with hundreds of quick micro-transactions, calculating your actual profit margins manually is incredibly tedious. Platforms don't just take a simple flat rate; they layer commissions, processing percentages, and flat per-item fees on top of each other. 
+### The Business Bottleneck
+High-volume sellers on live-stream and social commerce marketplaces (like Whatnot and TikTok Shop) manage hundreds of micro-transactions daily. Optimizing profit margins is incredibly difficult because channels use wildly different, multi-layered fee structures (varying percentage commissions, transaction processing rates, and flat per-item fees). Without automated data consolidation, tracking true channel efficiency is nearly impossible.
 
-I built `consignflow` to eliminate this bottleneck. The script automatically parses raw CSV sales ledgers, filters out specific inventory batches (like product lines starting with the prefix `M1`), and pushes the numbers through a precise fee matrix. Instead of digging through spreadsheets, a seller gets a clean console breakdown of their exact net payout instantly.
+### The Engineering Architecture
+`consignflow` bridges the gap between raw ledger data and operational strategy. Built in Python, the system parses incoming multi-platform CSV tables, filters targeted inventory batches (such as product lines prefixed with `M1`), and dynamically routes transactions through an enterprise-grade backend. 
 
----
+Instead of an unstable chain of conditional statements, the engine leverages the **Strategy Design Pattern** paired with a **Simple Factory Pattern** to dynamically instantiate decoupled financial logic engines for each marketplace on the fly. 
 
-## How It Works Under the Hood
-
-Instead of overcomplicating the stack, I focused on making the script fast and resilient against bad data:
-
-* **File Management:** Uses Python’s native `os` and `csv` modules to cleanly map file paths and stream data tables without needing heavy external libraries.
-* **Input Sanitization:** Cleans up messy data inputs automatically. The script trims accidental trailing spaces and flattens text casing (e.g., converting " M1 " or "m1" perfectly) so human typing errors in the inventory log don't break the system.
-* **The Math Logic:** Tracks the exact live fee breakdown used by major resale platforms:
-
-$$\text{Commission} = \text{Gross Price} \times 0.08$$
-
-$$\text{Processing Fee} = (\text{Gross Price} \times 0.029) + 0.30$$
-
-$$\text{Net Payout} = \text{Gross Price} - (\text{Commission} + \text{Processing Fee})$$
+The execution terminates by aggregating raw transactional data into a centralized **Financial Analytics Dashboard** that reveals macro-level profitability metrics and individual channel margin efficiencies.
 
 ---
 
-## Project Structure
+## 🛠️ Software Design & Implementation
 
-* `parser.py` — The core logic, string parsing routines, and financial math.
-* `mock_sales.csv` — A simulated multi-platform ledger used to test the code.
-* `ARCHITECTURE.md` — Notes on system design and why I chose this specific layout.
-* `TODO.md` — My active feature roadmap for future updates to the engine.
+* **Architectural Design Patterns:** Implements an Object-Oriented `FeeCalculator` Strategy interface. New marketplaces can be integrated or updated independently without risking code regression or altering core data streaming lines.
+* **Input Sanitization Pipeline:** Normalizes inconsistent raw ledger inputs by stripping whitespace anomalies and flattening text casing to guarantee matching precision across human-entered fields.
+* **Centralized Business Intelligence:** Aggregates running data to calculate multi-channel KPIs:
+
+$$\text{Cumulative Margin \%} = \left( \frac{\text{Total Net Revenue}}{\text{Total Gross Revenue}} \right) \times 100$$
+
+$$\text{Channel Efficiency \%} = \left( \frac{\text{Channel Net Sales}}{\text{Channel Gross Sales}} \right) \times 100$$
 
 ---
 
-## Example Console Output
+## 📂 Project Structure
 
-Running the script via `uv run parser.py` prints out a clear, line-by-line financial breakdown for matching items:
+* `parser.py` — The core software pipeline executing the Strategy and Factory design patterns alongside the BI aggregation engine.
+* `mock_sales.csv` — A multi-platform transaction ledger mapping diverse market channels.
+* `ARCHITECTURE.md` — Technical system design notes outlining the UML class structure and OOP choices.
+* `TODO.md` — Active development roadmap showing future scalability plans.
+
+---
+
+## 🚀 Live Analytics Console Output
+
+Executing the pipeline via `uv run parser.py` yields high-fidelity ledger parsing followed by an automated operational dashboard:
 
 ```text
 Reading sales data from: C:\...\mock_sales.csv
---- Scanning for items starting with 'M1' & Calculating Payouts ---
+--- Scanning for items starting with 'M1' & Calculating Multi-Platform Payouts ---
+Match Found! Item: 'M1 1996 Jordan Card'
+  Platform:     Whatnot
+  Gross Price:  $150.00
+  Fees Charged: $16.65 (Commission: $12.00 | Tx Fee: $4.35 | Flat Fee: $0.30)
+  Net Payout:   $133.35
 
-Match Found! Item: 'M1 Vintage Tee'
-  Gross Price:  $50.00
-  Whatnot Fees: $5.75 (8% Commission: $4.00 | 2.9% Tx Fee: $1.45 | Flat Fee: $0.30)
-  Net Payout:   $44.25
+Match Found! Item: 'M1 Vintage Nike Windbreaker'
+  Platform:     TikTok Shop
+  Gross Price:  $45.00
+  Fees Charged: $3.00 (Commission: $2.70 | Tx Fee: $0.00 | Flat Fee: $0.30)
+  Net Payout:   $42.00
 
-Total matching items found: 1
+=====================================================================
+                   CONSIGNFLOW FINANCIAL DASHBOARD                   
+=====================================================================
+Total Matches Processed: 2
+Total Gross Revenue:     $195.00
+Total Fees Deducted:     $19.65
+Net Take-Home Revenue:   $175.35
+Cumulative Profit Margin: 89.92%
+---------------------------------------------------------------------
+                         PLATFORM BREAKDOWN                          
+---------------------------------------------------------------------
+Platform           | Volume | Gross Sales | Total Fees | Efficiency
+---------------------------------------------------------------------
+Whatnot            | 1      | $150.00     | $16.65     | 88.90%
+Tiktok Shop        | 1      | $45.00      | $3.00      | 93.33%
+=====================================================================
