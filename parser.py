@@ -120,10 +120,10 @@ class FeeCalculatorFactory:
             raise ValueError(f"Unsupported platform: '{platform}'")
 
 
-def load_and_parse_sales(csv_path: str) -> dict:
+def load_and_parse_sales(csv_file_or_path) -> dict:
     """
-    Helper function to load the CSV, filter items starting with 'M1',
-    calculate fees, and aggregate financial statistics.
+    Helper function to load either a CSV file path (string) or a file-like object (StringIO),
+    filter items starting with 'M1', calculate fees, and aggregate financial statistics.
     Returns a dictionary containing raw matched items list and aggregated stats.
     """
     matched_items = []
@@ -132,14 +132,19 @@ def load_and_parse_sales(csv_path: str) -> dict:
     aggregate_net = 0.0
     platform_breakdown = {}
 
-    if not os.path.exists(csv_path):
-        return {
-            "items": [],
-            "totals": {"gross": 0.0, "fees": 0.0, "net": 0.0, "count": 0, "margin": 0.0},
-            "platforms": {}
-        }
+    is_path = isinstance(csv_file_or_path, str)
+    if is_path:
+        if not os.path.exists(csv_file_or_path):
+            return {
+                "items": [],
+                "totals": {"gross": 0.0, "fees": 0.0, "net": 0.0, "count": 0, "margin": 0.0},
+                "platforms": {}
+            }
+        file = open(csv_file_or_path, mode="r", encoding="utf-8")
+    else:
+        file = csv_file_or_path
 
-    with open(csv_path, mode="r", encoding="utf-8") as file:
+    try:
         reader = csv.DictReader(file)
         for row in reader:
             title = row["Item Title"]
@@ -193,6 +198,9 @@ def load_and_parse_sales(csv_path: str) -> dict:
                 except ValueError:
                     # Gracefully skip unsupported platforms
                     pass
+    finally:
+        if is_path:
+            file.close()
 
     cumulative_margin_pct = (aggregate_net / aggregate_gross * 100) if aggregate_gross > 0 else 0.0
     
