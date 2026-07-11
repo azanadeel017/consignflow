@@ -129,6 +129,15 @@ csv_path = os.path.join(script_dir, "mock_sales.csv")
 # Print a friendly message to show we are starting the scan.
 print(f"Reading sales data from: {csv_path}\n")
 
+# Initialize cumulative business analytics variables.
+aggregate_gross = 0.0
+aggregate_fees = 0.0
+aggregate_net = 0.0
+
+# Initialize a dictionary to store platform breakdown statistics.
+# Format: { "PlatformName": { "gross": float, "fees": float, "net": float, "count": int } }
+platform_breakdown = {}
+
 # Open the CSV file. 'r' stands for read mode, and we use utf-8 encoding.
 with open(csv_path, mode="r", encoding="utf-8") as file:
     # Use DictReader to parse each row of the CSV as a dictionary.
@@ -180,6 +189,27 @@ with open(csv_path, mode="r", encoding="utf-8") as file:
                 print(f"  Fees Charged: ${total_fees:.2f} (Commission: ${commission:.2f} | Tx Fee: ${transaction_fee:.2f} | Flat Fee: ${flat_fee:.2f})")
                 print(f"  Net Payout:   ${net_payout:.2f}\n")
                 
+                # Accumulate the total global metrics.
+                aggregate_gross += gross_price
+                aggregate_fees += total_fees
+                aggregate_net += net_payout
+                
+                # Update platform-specific statistics.
+                # Standardize platform key representation (Title Case) for clean printing.
+                platform_display_name = platform.strip().title()
+                if platform_display_name not in platform_breakdown:
+                    platform_breakdown[platform_display_name] = {
+                        "gross": 0.0,
+                        "fees": 0.0,
+                        "net": 0.0,
+                        "count": 0
+                    }
+                
+                platform_breakdown[platform_display_name]["gross"] += gross_price
+                platform_breakdown[platform_display_name]["fees"] += total_fees
+                platform_breakdown[platform_display_name]["net"] += net_payout
+                platform_breakdown[platform_display_name]["count"] += 1
+                
                 # Increment our counter of matches by 1.
                 match_count += 1
                 
@@ -187,6 +217,35 @@ with open(csv_path, mode="r", encoding="utf-8") as file:
                 # Handle cases where the platform is not yet supported.
                 print(f"Warning! Match Found but Skipped: '{title}'")
                 print(f"  Error: {e}\n")
-                
-    # Print the total number of items that matched the 'M1' scan.
-    print(f"Total matching items found: {match_count}")
+
+# Calculate global cumulative profit margin percentage.
+# Uses a ternary operator to handle division by zero defensively if no items match.
+cumulative_margin_pct = (aggregate_net / aggregate_gross * 100) if aggregate_gross > 0 else 0.0
+
+# Print the final visual Financial Analytics Dashboard to the console.
+print("=====================================================================")
+print("                   CONSIGNFLOW FINANCIAL DASHBOARD                   ")
+print("=====================================================================")
+print(f"Total Matches Processed: {match_count}")
+print(f"Total Gross Revenue:     ${aggregate_gross:.2f}")
+print(f"Total Fees Deducted:     ${aggregate_fees:.2f}")
+print(f"Net Take-Home Revenue:   ${aggregate_net:.2f}")
+print(f"Cumulative Profit Margin: {cumulative_margin_pct:.2f}%")
+print("---------------------------------------------------------------------")
+print("                         PLATFORM BREAKDOWN                          ")
+print("---------------------------------------------------------------------")
+print(f"{'Platform':<18} | {'Volume':<6} | {'Gross Sales':<11} | {'Total Fees':<10} | {'Efficiency':<10}")
+print("-" * 69)
+
+# Loop through each platform to print their aggregated sales and fee stats.
+for plt_name, stats in platform_breakdown.items():
+    plt_gross = stats["gross"]
+    plt_fees = stats["fees"]
+    plt_net = stats["net"]
+    plt_count = stats["count"]
+    # Calculate the platform efficiency (Net Margin %) defensively.
+    plt_efficiency = (plt_net / plt_gross * 100) if plt_gross > 0 else 0.0
+    
+    print(f"{plt_name:<18} | {plt_count:<6} | ${plt_gross:<10.2f} | ${plt_fees:<9.2f} | {plt_efficiency:.2f}%")
+
+print("=====================================================================\n")
