@@ -1,6 +1,16 @@
-# ConsignFlow Scanner & Fee Engine Architecture
+# ConsignFlow Core Architecture
 
-Welcome to the ConsignFlow Core Engine documentation! This architecture details the design patterns and components implemented in `parser.py` to achieve modular, extensible, and clean code suitable for production and portfolio review.
+Welcome to the ConsignFlow Core Engine documentation! This architecture details the design patterns, database modeling, and frontend application layers implemented in the repository.
+
+---
+
+## Architecture Components
+
+ConsignFlow is structured as a modular three-tier application:
+
+1. **Backend Engine (`parser.py`)**: Uses the **Strategy Pattern** to execute platform-specific fee calculations dynamically without logic nesting, and loads data using `csv.DictReader`.
+2. **Database Layer (`schema.sql`)**: Contains a 3NF relational database schema optimized for PostgreSQL (supporting sellers, inventory, platforms, and transaction tables) utilizing UUID keys and high-throughput indexes.
+3. **Presentation Layer (`app.py`)**: A Python-native Streamlit dashboard displaying business intelligence analytics, key performance indicators (KPIs), charts, and dynamic ledger searching.
 
 ---
 
@@ -17,7 +27,7 @@ The `FeeCalculatorFactory` acts as a central registry. It matches the platform n
 
 ---
 
-## System Workflow Diagram
+## Data & Application Flow
 
 ```text
 [ mock_sales.csv ]
@@ -40,7 +50,15 @@ The `FeeCalculatorFactory` acts as a central registry. It matches the platform n
  [ Specific FeeCalculator ] ---> Executes calculation strategy
         |
         v
- [ Console Payout Report ] ---> Displays Gross Price vs. calculated Net Payout
+ [ load_and_parse_sales() ] ---> Returns raw list and aggregated stats
+        |
+        +---> CLI stdout: Financial CLI dashboard (run_parser())
+        |
+        +---> Streamlit UI: app.py
+                 |
+                 +---> 1. Executive KPI Cards (Gross, Fees, Margin)
+                 +---> 2. Bar Chart comparison (Gross vs. Net by Platform)
+                 +---> 3. Searchable & Filterable Data Ledger Table
 ```
 
 ### UML Class Structure (Mermaid)
@@ -77,14 +95,3 @@ classDiagram
     
     FeeCalculatorFactory --> FeeCalculator : resolves
 ```
-
----
-
-## Supported Marketplaces & Fee Structures
-
-| Marketplace | Commission Rate | Transaction Fee | Flat Fee | Notes / Rules |
-| :--- | :--- | :--- | :--- | :--- |
-| **Whatnot** | 8.0% | 2.9% | $0.30 | Standard livestream rates |
-| **eBay** | 13.25% | 0% | $0.30 | Collectibles/Clothing tier |
-| **Poshmark** | 20.0% (>= $15) | 0% | $0.00 | Under $15.00: flat $2.95 commission |
-| **TikTok Shop** | 6.0% | 0% | $0.30 | Standard seller fee |

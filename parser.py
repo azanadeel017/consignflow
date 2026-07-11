@@ -120,132 +120,142 @@ class FeeCalculatorFactory:
             raise ValueError(f"Unsupported platform: '{platform}'")
 
 
-# Get the directory where this script is located.
-script_dir = os.path.dirname(os.path.abspath(__file__))
+def load_and_parse_sales(csv_path: str) -> dict:
+    """
+    Helper function to load the CSV, filter items starting with 'M1',
+    calculate fees, and aggregate financial statistics.
+    Returns a dictionary containing raw matched items list and aggregated stats.
+    """
+    matched_items = []
+    aggregate_gross = 0.0
+    aggregate_fees = 0.0
+    aggregate_net = 0.0
+    platform_breakdown = {}
 
-# Build the path to the CSV file relative to this script's directory.
-csv_path = os.path.join(script_dir, "mock_sales.csv")
+    if not os.path.exists(csv_path):
+        return {
+            "items": [],
+            "totals": {"gross": 0.0, "fees": 0.0, "net": 0.0, "count": 0, "margin": 0.0},
+            "platforms": {}
+        }
 
-# Print a friendly message to show we are starting the scan.
-print(f"Reading sales data from: {csv_path}\n")
+    with open(csv_path, mode="r", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            title = row["Item Title"]
+            cleaned_title = title.strip().lower()
+            
+            if cleaned_title.startswith("m1"):
+                platform = row["Platform"]
+                gross_price = float(row["Sale Price"])
+                
+                try:
+                    calculator = FeeCalculatorFactory.get_calculator(platform)
+                    fees = calculator.calculate_fees(gross_price)
+                    
+                    commission = fees["commission"]
+                    transaction_fee = fees["transaction_fee"]
+                    flat_fee = fees["flat_fee"]
+                    total_fees = fees["total_fees"]
+                    net_payout = round(gross_price - total_fees, 2)
+                    
+                    # Store transaction record
+                    matched_items.append({
+                        "item_title": title,
+                        "platform": platform.strip().title(),
+                        "gross_price": gross_price,
+                        "commission": commission,
+                        "transaction_fee": transaction_fee,
+                        "flat_fee": flat_fee,
+                        "total_fees": total_fees,
+                        "net_payout": net_payout
+                    })
+                    
+                    # Accumulate globals
+                    aggregate_gross += gross_price
+                    aggregate_fees += total_fees
+                    aggregate_net += net_payout
+                    
+                    # Accumulate platform breakdown
+                    plt_name = platform.strip().title()
+                    if plt_name not in platform_breakdown:
+                        platform_breakdown[plt_name] = {
+                            "gross": 0.0,
+                            "fees": 0.0,
+                            "net": 0.0,
+                            "count": 0
+                        }
+                    platform_breakdown[plt_name]["gross"] += gross_price
+                    platform_breakdown[plt_name]["fees"] += total_fees
+                    platform_breakdown[plt_name]["net"] += net_payout
+                    platform_breakdown[plt_name]["count"] += 1
+                    
+                except ValueError:
+                    # Gracefully skip unsupported platforms
+                    pass
 
-# Initialize cumulative business analytics variables.
-aggregate_gross = 0.0
-aggregate_fees = 0.0
-aggregate_net = 0.0
-
-# Initialize a dictionary to store platform breakdown statistics.
-# Format: { "PlatformName": { "gross": float, "fees": float, "net": float, "count": int } }
-platform_breakdown = {}
-
-# Open the CSV file. 'r' stands for read mode, and we use utf-8 encoding.
-with open(csv_path, mode="r", encoding="utf-8") as file:
-    # Use DictReader to parse each row of the CSV as a dictionary.
-    reader = csv.DictReader(file)
+    cumulative_margin_pct = (aggregate_net / aggregate_gross * 100) if aggregate_gross > 0 else 0.0
     
-    # Initialize a counter to keep track of how many matching items we find.
-    match_count = 0
-    
-    # Print a header for the results output.
+    return {
+        "items": matched_items,
+        "totals": {
+            "gross": round(aggregate_gross, 2),
+            "fees": round(aggregate_fees, 2),
+            "net": round(aggregate_net, 2),
+            "count": len(matched_items),
+            "margin": round(cumulative_margin_pct, 2)
+        },
+        "platforms": platform_breakdown
+    }
+
+
+def run_parser():
+    """
+    Main function to run the CLI parser and print results.
+    """
+    # Get the directory where this script is located.
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Build the path to the CSV file relative to this script's directory.
+    csv_path = os.path.join(script_dir, "mock_sales.csv")
+
+    print(f"Reading sales data from: {csv_path}\n")
     print("--- Scanning for items starting with 'M1' & Calculating Multi-Platform Payouts ---\n")
-    
-    # Loop through each row of the CSV file one by one.
-    for row in reader:
-        # Get the 'Item Title' from the current row.
-        title = row["Item Title"]
-        
-        # Clean the title defensively:
-        # 1. strip() removes any leading or trailing spaces (e.g. " M1 " -> "M1").
-        # 2. lower() converts all letters to lowercase (e.g. "M1" -> "m1").
-        cleaned_title = title.strip().lower()
-        
-        # Check if the cleaned title starts with the prefix "m1".
-        if cleaned_title.startswith("m1"):
-            # Get the platform name from the row.
-            platform = row["Platform"]
-            
-            # Get the 'Sale Price' and convert it to float for calculations.
-            gross_price = float(row["Sale Price"])
-            
-            try:
-                # Retrieve the appropriate fee calculator using the Factory.
-                calculator = FeeCalculatorFactory.get_calculator(platform)
-                
-                # Calculate the breakdown of fees.
-                fees = calculator.calculate_fees(gross_price)
-                
-                commission = fees["commission"]
-                transaction_fee = fees["transaction_fee"]
-                flat_fee = fees["flat_fee"]
-                total_fees = fees["total_fees"]
-                
-                # Subtract total fees from gross price to determine final payout for the seller.
-                net_payout = round(gross_price - total_fees, 2)
-                
-                # Print a detailed, clean confirmation summary showing gross price, platform, fees breakdown, and net payout.
-                print(f"Match Found! Item: '{title}'")
-                print(f"  Platform:     {platform}")
-                print(f"  Gross Price:  ${gross_price:.2f}")
-                print(f"  Fees Charged: ${total_fees:.2f} (Commission: ${commission:.2f} | Tx Fee: ${transaction_fee:.2f} | Flat Fee: ${flat_fee:.2f})")
-                print(f"  Net Payout:   ${net_payout:.2f}\n")
-                
-                # Accumulate the total global metrics.
-                aggregate_gross += gross_price
-                aggregate_fees += total_fees
-                aggregate_net += net_payout
-                
-                # Update platform-specific statistics.
-                # Standardize platform key representation (Title Case) for clean printing.
-                platform_display_name = platform.strip().title()
-                if platform_display_name not in platform_breakdown:
-                    platform_breakdown[platform_display_name] = {
-                        "gross": 0.0,
-                        "fees": 0.0,
-                        "net": 0.0,
-                        "count": 0
-                    }
-                
-                platform_breakdown[platform_display_name]["gross"] += gross_price
-                platform_breakdown[platform_display_name]["fees"] += total_fees
-                platform_breakdown[platform_display_name]["net"] += net_payout
-                platform_breakdown[platform_display_name]["count"] += 1
-                
-                # Increment our counter of matches by 1.
-                match_count += 1
-                
-            except ValueError as e:
-                # Handle cases where the platform is not yet supported.
-                print(f"Warning! Match Found but Skipped: '{title}'")
-                print(f"  Error: {e}\n")
 
-# Calculate global cumulative profit margin percentage.
-# Uses a ternary operator to handle division by zero defensively if no items match.
-cumulative_margin_pct = (aggregate_net / aggregate_gross * 100) if aggregate_gross > 0 else 0.0
+    results = load_and_parse_sales(csv_path)
 
-# Print the final visual Financial Analytics Dashboard to the console.
-print("=====================================================================")
-print("                   CONSIGNFLOW FINANCIAL DASHBOARD                   ")
-print("=====================================================================")
-print(f"Total Matches Processed: {match_count}")
-print(f"Total Gross Revenue:     ${aggregate_gross:.2f}")
-print(f"Total Fees Deducted:     ${aggregate_fees:.2f}")
-print(f"Net Take-Home Revenue:   ${aggregate_net:.2f}")
-print(f"Cumulative Profit Margin: {cumulative_margin_pct:.2f}%")
-print("---------------------------------------------------------------------")
-print("                         PLATFORM BREAKDOWN                          ")
-print("---------------------------------------------------------------------")
-print(f"{'Platform':<18} | {'Volume':<6} | {'Gross Sales':<11} | {'Total Fees':<10} | {'Efficiency':<10}")
-print("-" * 69)
+    # Print transaction details
+    for item in results["items"]:
+        print(f"Match Found! Item: '{item['item_title']}'")
+        print(f"  Platform:     {item['platform']}")
+        print(f"  Gross Price:  ${item['gross_price']:.2f}")
+        print(f"  Fees Charged: ${item['total_fees']:.2f} (Commission: ${item['commission']:.2f} | Tx Fee: ${item['transaction_fee']:.2f} | Flat Fee: ${item['flat_fee']:.2f})")
+        print(f"  Net Payout:   ${item['net_payout']:.2f}\n")
 
-# Loop through each platform to print their aggregated sales and fee stats.
-for plt_name, stats in platform_breakdown.items():
-    plt_gross = stats["gross"]
-    plt_fees = stats["fees"]
-    plt_net = stats["net"]
-    plt_count = stats["count"]
-    # Calculate the platform efficiency (Net Margin %) defensively.
-    plt_efficiency = (plt_net / plt_gross * 100) if plt_gross > 0 else 0.0
-    
-    print(f"{plt_name:<18} | {plt_count:<6} | ${plt_gross:<10.2f} | ${plt_fees:<9.2f} | {plt_efficiency:.2f}%")
+    # Print Dashboard
+    print("=====================================================================")
+    print("                   CONSIGNFLOW FINANCIAL DASHBOARD                   ")
+    print("=====================================================================")
+    print(f"Total Matches Processed: {results['totals']['count']}")
+    print(f"Total Gross Revenue:     ${results['totals']['gross']:.2f}")
+    print(f"Total Fees Deducted:     ${results['totals']['fees']:.2f}")
+    print(f"Net Take-Home Revenue:   ${results['totals']['net']:.2f}")
+    print(f"Cumulative Profit Margin: {results['totals']['margin']:.2f}%")
+    print("---------------------------------------------------------------------")
+    print("                         PLATFORM BREAKDOWN                          ")
+    print("---------------------------------------------------------------------")
+    print(f"{'Platform':<18} | {'Volume':<6} | {'Gross Sales':<11} | {'Total Fees':<10} | {'Efficiency':<10}")
+    print("-" * 69)
 
-print("=====================================================================\n")
+    for plt_name, stats in results["platforms"].items():
+        plt_gross = stats["gross"]
+        plt_fees = stats["fees"]
+        plt_net = stats["net"]
+        plt_count = stats["count"]
+        plt_efficiency = (plt_net / plt_gross * 100) if plt_gross > 0 else 0.0
+        print(f"{plt_name:<18} | {plt_count:<6} | ${plt_gross:<10.2f} | ${plt_fees:<9.2f} | {plt_efficiency:.2f}%")
+
+    print("=====================================================================\n")
+
+
+if __name__ == "__main__":
+    run_parser()
