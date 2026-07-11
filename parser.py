@@ -2,6 +2,8 @@
 import csv
 # Import the built-in 'os' module to handle system file paths.
 import os
+# Import 'io' to work with in-memory text streams.
+import io
 # Import ABC and abstractmethod to define interface classes (Strategy Pattern).
 from abc import ABC, abstractmethod
 
@@ -120,11 +122,12 @@ class FeeCalculatorFactory:
             raise ValueError(f"Unsupported platform: '{platform}'")
 
 
-def load_and_parse_sales(csv_file_or_path) -> dict:
+def load_and_parse_sales(csv_file_or_content) -> dict:
     """
-    Helper function to load either a CSV file path (string/PathLike) or a file-like object (StringIO),
-    filter items starting with 'M1', calculate fees, and aggregate financial statistics.
-    Returns a dictionary containing raw matched items list and aggregated stats.
+    Helper function to load CSV data. Supports:
+    1. A file-like stream object (StringIO / TextIO)
+    2. A raw CSV content string
+    3. A file path string
     """
     matched_items = []
     aggregate_gross = 0.0
@@ -133,37 +136,47 @@ def load_and_parse_sales(csv_file_or_path) -> dict:
     platform_breakdown = {}
 
     # Duck-typing: If it has a 'read' attribute, it's a file-like stream object (e.g. StringIO from Streamlit)
-    if hasattr(csv_file_or_path, "read"):
-        file = csv_file_or_path
-        is_path = False
-    else:
-        # Otherwise, assume it's a file path string or os.PathLike object
-        is_path = True
-        try:
-            if not os.path.exists(csv_file_or_path):
+    if hasattr(csv_file_or_content, "read"):
+        file_ctx = csv_file_or_content
+        should_close = False
+    elif isinstance(csv_file_or_content, str):
+        # Check if the string contains CSV features (newlines or commas) or if it's a file path
+        if "\n" in csv_file_or_content or "," in csv_file_or_content:
+            file_ctx = io.StringIO(csv_file_or_content)
+            should_close = True
+        else:
+            # It's a file path string. Open directly and catch errors instead of using os.path utilities.
+            try:
+                file_ctx = open(csv_file_or_content, mode="r", encoding="utf-8")
+                should_close = True
+            except (FileNotFoundError, IOError, TypeError, ValueError):
                 return {
                     "items": [],
                     "totals": {"gross": 0.0, "fees": 0.0, "net": 0.0, "count": 0, "margin": 0.0},
                     "platforms": {}
                 }
-            file = open(csv_file_or_path, mode="r", encoding="utf-8")
-        except TypeError:
-            # Fallback in case an unsupported type fails disk checking operations
-            return {
-                "items": [],
-                "totals": {"gross": 0.0, "fees": 0.0, "net": 0.0, "count": 0, "margin": 0.0},
-                "platforms": {}
-            }
+    else:
+        # Fallback for unexpected types
+        return {
+            "items": [],
+            "totals": {"gross": 0.0, "fees": 0.0, "net": 0.0, "count": 0, "margin": 0.0},
+            "platforms": {}
+        }
 
     try:
-        reader = csv.DictReader(file)
+        reader = csv.DictReader(file_ctx)
         for row in reader:
-            title = row["Item Title"]
+            title = row.get("Item Title")
+            if not title:
+                continue
             cleaned_title = title.strip().lower()
             
             if cleaned_title.startswith("m1"):
-                platform = row["Platform"]
-                gross_price = float(row["Sale Price"])
+                platform = row.get("Platform", "")
+                try:
+                    gross_price = float(row.get("Sale Price", 0.0))
+                except (ValueError, TypeError):
+                    continue
                 
                 try:
                     calculator = FeeCalculatorFactory.get_calculator(platform)
@@ -210,8 +223,8 @@ def load_and_parse_sales(csv_file_or_path) -> dict:
                     # Gracefully skip unsupported platforms
                     pass
     finally:
-        if is_path:
-            file.close()
+        if should_close:
+            file_ctx.close()
 
     cumulative_margin_pct = (aggregate_net / aggregate_gross * 100) if aggregate_gross > 0 else 0.0
     
