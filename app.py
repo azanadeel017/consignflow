@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import os
 import io
+import time
 
 # Import our backend parser engine
-from parser import load_and_parse_sales
+from parser import load_and_parse_sales, FeeCalculatorFactory
 
 # Set page configuration for a premium dashboard feel
 st.set_page_config(
@@ -13,6 +14,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Initialize Session State for Login and Onboarding
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "onboarding" not in st.session_state:
+    st.session_state.onboarding = False
 
 # Custom CSS to hide Streamlit branding, style pricing cards, and inject Inter typography
 st.markdown("""
@@ -152,8 +159,69 @@ st.markdown("""
         margin-right: 10px;
         font-weight: bold;
     }
+    
+    /* Login & SignUp Box Styles */
+    .login-container {
+        max-width: 450px;
+        margin: 80px auto;
+        padding: 40px;
+        background-color: #1e293b;
+        border-radius: 12px;
+        border: 1px solid #334155;
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    }
     </style>
 """, unsafe_allow_html=True)
+
+# -----------------------------------------------------
+# MOCK ACCOUNT CREATION SCREEN & ONBOARDING WIZARD
+# -----------------------------------------------------
+if not st.session_state.logged_in:
+    if st.session_state.onboarding:
+        # Onboarding loading wizard animation
+        st.markdown("<div style='text-align: center; margin-top: 150px;'>", unsafe_allow_html=True)
+        st.subheader("⚙️ Provisioning ConsignFlow Core Setup")
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for percent_complete in range(0, 101, 10):
+            time.sleep(0.15)
+            progress_bar.progress(percent_complete)
+            if percent_complete < 30:
+                status_text.markdown("<p style='color: #94a3b8; text-align: center;'>Configuring sandbox databases...</p>", unsafe_allow_html=True)
+            elif percent_complete < 60:
+                status_text.markdown("<p style='color: #94a3b8; text-align: center;'>Binding Multi-Platform Strategy Engines...</p>", unsafe_allow_html=True)
+            elif percent_complete < 90:
+                status_text.markdown("<p style='color: #94a3b8; text-align: center;'>Generating encryption keys and layout themes...</p>", unsafe_allow_html=True)
+            else:
+                status_text.markdown("<p style='color: #10b981; text-align: center; font-weight: bold;'>Onboarding complete! Loading dashboard...</p>", unsafe_allow_html=True)
+        
+        st.session_state.logged_in = True
+        st.session_state.onboarding = False
+        st.rerun()
+    else:
+        # Minimalist login container
+        st.markdown('<div class="login-container">', unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #f8fafc; margin-bottom: 10px;'>ConsignFlow Setup</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #94a3b8; font-size: 14px; margin-bottom: 30px;'>Create a free account to audit store commission ledgers.</p>", unsafe_allow_html=True)
+        
+        business_name = st.text_input("Store Name", value="Vintages & Collectibles LLC")
+        email_addr = st.text_input("Work Email Address", placeholder="owner@store.com")
+        passwd = st.text_input("Create Password", type="password")
+        
+        st.write("")
+        if st.button("🚀 Create Free Account & Launch Onboarding", use_container_width=True):
+            if not email_addr or not passwd:
+                st.error("Please provide email and password details to initialize.")
+            else:
+                st.session_state.onboarding = True
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.stop()
+
+# =====================================================
+# MAIN APPLICATION INTERFACE (LOADS POST-LOGIN)
+# =====================================================
 
 # App Title & Description
 st.markdown("""
@@ -177,7 +245,6 @@ is_premium = st.sidebar.checkbox(
 
 if is_premium:
     st.sidebar.success("👑 Subscription: ACTIVE (PRO)")
-    
     st.sidebar.markdown("---")
     st.sidebar.header("⚙️ Configuration")
     
@@ -210,6 +277,34 @@ else:
     consignor_split = 80
     store_fee_pct = 20
     uploaded_file = None
+
+# -----------------------------------------------------
+# INTERACTIVE EXPLANATION SANDBOX (Placed in Sidebar)
+# -----------------------------------------------------
+with st.sidebar.expander("❓ How are payouts calculated?", expanded=False):
+    st.markdown("**Transaction Calculator:**")
+    sim_gross = st.slider("Simulate Gross Price ($)", min_value=10.0, max_value=500.0, value=100.0, step=10.0)
+    sim_platform = st.selectbox("Select Platform", ["Whatnot", "TikTok Shop", "eBay", "Poshmark"])
+    
+    # Evaluate payout breakdown using Strategy engine
+    try:
+        calc = FeeCalculatorFactory.get_calculator(sim_platform)
+        sim_fees_dict = calc.calculate_fees(sim_gross)
+        sim_fees = sim_fees_dict["total_fees"]
+        sim_net = round(sim_gross - sim_fees, 2)
+        sim_seller = round(sim_net * (consignor_split / 100.0), 2)
+        sim_store = round(sim_net - sim_seller, 2)
+        
+        st.markdown(f"""
+            **Split Breakdown:**
+            * **Gross Sale Price:** `+${sim_gross:.2f}`
+            * **Marketplace Fee:** `-${sim_fees:.2f}`
+            * **Net Sales Proceeds:** `${sim_net:.2f}`
+            * **Store Share ({store_fee_pct}%):** `-${sim_store:.2f}`
+            * **Seller Share ({consignor_split}%):** `+${sim_seller:.2f}`
+        """)
+    except Exception as e:
+        st.error(f"Calculator error: {e}")
 
 # -----------------------------------------------------
 # DATA LOADING & RE-PROCESSING
@@ -282,9 +377,7 @@ df_all = pd.DataFrame(items_processed) if items_processed else pd.DataFrame()
 # CONDITIONAL UI RENDERING (FREE vs PAID)
 # -----------------------------------------------------
 if not is_premium:
-    # -----------------------------------------------------
-    # HIGH-CONVERTING SAAS PRICING MATRIX
-    # -----------------------------------------------------
+    # High-converting SaaS Pricing Matrix displayed at the top for free users
     st.markdown('<div class="tab-header" style="text-align: center; color: #10b981;">Unlock ConsignFlow Premium</div>', unsafe_allow_html=True)
     st.markdown('<p style="text-align: center; color: #94a3b8; font-size: 16px; margin-bottom: 30px;">Upgrade your account to access advanced multi-platform calculations and batch financial operations.</p>', unsafe_allow_html=True)
     
@@ -325,7 +418,6 @@ if not is_premium:
                 </div>
             </div>
         """, unsafe_allow_html=True)
-        # Streamlit button to upgrade to Pro (emerald-green button)
         if st.button("🚀 Upgrade to Pro via Stripe", use_container_width=True):
             st.toast("Simulating checkout funnel... Stripe session initialized!")
             
@@ -571,7 +663,6 @@ with tab2:
             ]
             
             if is_premium:
-                # Generate in-memory CSV export buffer
                 csv_buffer = io.StringIO()
                 df_display.to_csv(csv_buffer, index=False)
                 csv_data = csv_buffer.getvalue()
@@ -592,10 +683,33 @@ with tab2:
         
         # Display detailed transaction table below
         st.markdown(f"#### Itemized Audit Log: `{selected_consignor}`")
-        st.dataframe(
-            df_display,
-            use_container_width=True,
-            hide_index=True
-        )
+        
+        # Render itemized digital receipts for a clean B2B receipt interface
+        for idx, row_item in df_filtered.iterrows():
+            st.markdown(f"""
+                <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 15px; margin-bottom: 12px; font-family: 'Inter', sans-serif;">
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #475569; padding-bottom: 6px; margin-bottom: 8px;">
+                        <span style="font-weight: 700; color: #f8fafc; font-size: 14px;">{row_item['Item Title']}</span>
+                        <span style="color: #94a3b8; font-size: 12px; font-weight: 600; text-transform: uppercase;">{row_item['Platform']}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+                        <span style="color: #94a3b8;">Gross Sale Price</span>
+                        <span style="color: #cbd5e1; font-weight: 500;">+${row_item['Gross Price']:.2f}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+                        <span style="color: #94a3b8;">Marketplace Fees</span>
+                        <span style="color: #f43f5e; font-weight: 500;">-${row_item['Total Fees']:.2f}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; border-bottom: 1px dotted #475569; padding-bottom: 6px;">
+                        <span style="color: #94a3b8;">Store Commission ({store_fee_pct}%)</span>
+                        <span style="color: #f43f5e; font-weight: 500;">-${row_item['Store Share']:.2f}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700;">
+                        <span style="color: #f8fafc;">Seller Net Payout</span>
+                        <span style="color: #10b981;">+${row_item['Seller Share']:.2f}</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
     else:
         st.info("No transaction data available.")
